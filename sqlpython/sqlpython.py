@@ -292,8 +292,17 @@ class sqlpython(cmd2.Cmd):
                         raise KeyError, 'Bind variable "%s" not defined.' % (varname)
         return result
 
+    def convert_charset(self, params):
+        charset = self.__dict__.get('charset')
+        if charset is None:
+            charset = 'utf8'
+        for k, v in params.items():
+            if isinstance(v, str):
+                params[k] = v.decode('utf8').encode(charset)
+
     def default(self, arg):
         self.varsUsed = self.findBinds(arg, givenBindVars={})
+        self.convert_charset(self.varsUsed)
         ending_args = arg.lower().split()[-2:]
         if 'end' in ending_args:
             command = '%s %s;'

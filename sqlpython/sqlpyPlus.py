@@ -349,6 +349,10 @@ class sqlpyPlus(sqlpython.sqlpython):
         self.result_history = []
         self.rows_remembered = 10000
         self.bloblimit = 5
+        self.charset = 'utf8'
+        # support gbk encoding
+        if os.environ['NLS_LANG'] == ".zhs16gbk":
+            self.charset = 'gbk'
         self.default_rdbms = 'oracle'
         self.rdbms_supported = Abbreviatable_List('oracle postgres mysql'.split())
         self.version = 'SQLPython %s' % sqlpython.__version__
@@ -360,6 +364,9 @@ class sqlpyPlus(sqlpython.sqlpython):
         the arguments.  Returns a tuple containing (command, args, line).
         'command' and 'args' may be None if the line couldn't be parsed.        
         Overrides cmd.cmd.parseline to accept variety of shortcuts.."""
+
+        # encode a line with specific charset, but it seems it don't work.
+        line = line.decode('utf8').encode(self.charset)
 
         cmd, arg, line = sqlpython.sqlpython.parseline(self, line)
         if cmd in ('select', 'sleect', 'insert', 'update', 'delete', 'describe',
@@ -482,6 +489,17 @@ class sqlpyPlus(sqlpython.sqlpython):
                 self.tblname = self.tableNameFinder.search(self.querytext).group(1)
             except AttributeError:
                 self.tblname = ''
+
+        # iterate all rows, decode them to unicode with specific charset 
+        self.rows = [list(row) for row in self.rows]
+        for row in self.rows:
+            count = 0
+            while count < len(row):
+                item = row[count]
+                if (isinstance(item, str)):
+                    # genshi will encode for us
+                    row[count] = item.decode(self.charset)
+                count += 1
         if outformat in output_templates:
             self.colnamelen = max(len(colname) for colname in self.colnames)
             result = output_templates[outformat].generate(formattedForSql=self.formattedForSql, **self.__dict__)        
@@ -506,6 +524,15 @@ class sqlpyPlus(sqlpython.sqlpython):
             plot.draw()
             return ''
         else:
+            # since all rows have been decoded to unicode, encode them with utf8
+            for row in self.rows:
+                count = 0
+                while count < len(row):
+                    item = row[count]
+                    if (isinstance(item, unicode)):
+                        # encode before output
+                        row[count] = item.encode('utf8')
+                    count += 1
             result = self.pmatrix(self.rows, 
                                   self.maxfetch, heading=self.heading, 
                                   restructuredtext = (outformat == '\\r'))
@@ -703,7 +730,7 @@ class sqlpyPlus(sqlpython.sqlpython):
         if arg.parsed.terminator == '\\t':
             rowlimit = rowlimit or self.maxtselctrows
         return rowlimit
-        
+
     def do_select(self, arg, bindVarsIn=None, terminator=None):
         """Fetch rows from a table.
 
@@ -717,6 +744,7 @@ class sqlpyPlus(sqlpython.sqlpython):
         bindVarsIn = bindVarsIn or {}
         rowlimit = self.rowlimit(arg)
         self.varsUsed = self.findBinds(arg, bindVarsIn)
+        self.convert_charset(self.varsUsed)
         if self.wildsql:
             selecttext = self.expandWildSql(arg)
         else:
@@ -1344,6 +1372,7 @@ class sqlpyPlus(sqlpython.sqlpython):
             self.do_setbind(arg.parsed.expanded.split(':',1)[1])
         else:
             varsUsed = self.findBinds(arg, {})
+            self.convert_charset(varsUsed)
             try:
                 self.curs.execute('begin\n%s;end;' % arg, varsUsed)
             except Exception, e:
