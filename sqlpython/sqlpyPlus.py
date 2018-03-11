@@ -351,7 +351,7 @@ class sqlpyPlus(sqlpython.sqlpython):
         self.bloblimit = 5
         self.charset = 'utf8'
         # support gbk encoding
-        if os.environ['NLS_LANG'] == ".zhs16gbk":
+        if 'NLS_LANG' in os.environ and os.environ['NLS_LANG'] == ".zhs16gbk":
             self.charset = 'gbk'
         self.default_rdbms = 'oracle'
         self.rdbms_supported = Abbreviatable_List('oracle postgres mysql'.split())
@@ -744,12 +744,13 @@ class sqlpyPlus(sqlpython.sqlpython):
         bindVarsIn = bindVarsIn or {}
         rowlimit = self.rowlimit(arg)
         self.varsUsed = self.findBinds(arg, bindVarsIn)
-        self.convert_charset(self.varsUsed)
+        self.convert_charset_for_dict(self.varsUsed)
         if self.wildsql:
             selecttext = self.expandWildSql(arg)
         else:
             selecttext = arg
         self.querytext = '%s %s' % (arg.parsed.command, selecttext)
+        self.querytext = self.convert_charset(self.querytext)
         if self.varsUsed:
             self.curs.execute(self.querytext, self.varsUsed)
         else: # this is an ugly workaround for the evil paramstyle curse upon DB-API2
@@ -1372,7 +1373,8 @@ class sqlpyPlus(sqlpython.sqlpython):
             self.do_setbind(arg.parsed.expanded.split(':',1)[1])
         else:
             varsUsed = self.findBinds(arg, {})
-            self.convert_charset(varsUsed)
+            self.convert_charset_for_dict(varsUsed)
+            arg = self.convert_charset(arg)
             try:
                 self.curs.execute('begin\n%s;end;' % arg, varsUsed)
             except Exception, e:

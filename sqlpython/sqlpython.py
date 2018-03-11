@@ -292,7 +292,13 @@ class sqlpython(cmd2.Cmd):
                         raise KeyError, 'Bind variable "%s" not defined.' % (varname)
         return result
 
-    def convert_charset(self, params):
+    def convert_charset(self, sql):
+        charset = self.__dict__.get('charset')
+        if charset is None:
+            charset = 'utf8'
+        return sql.decode('utf8').encode(charset)
+
+    def convert_charset_for_dict(self, params):
         charset = self.__dict__.get('charset')
         if charset is None:
             charset = 'utf8'
@@ -302,7 +308,7 @@ class sqlpython(cmd2.Cmd):
 
     def default(self, arg):
         self.varsUsed = self.findBinds(arg, givenBindVars={})
-        self.convert_charset(self.varsUsed)
+        self.convert_charset_for_dict(self.varsUsed)
         ending_args = arg.lower().split()[-2:]
         if 'end' in ending_args:
             command = '%s %s;'
@@ -311,6 +317,7 @@ class sqlpython(cmd2.Cmd):
         if self.rdbms == 'oracle':
             current_time = self.current_database_time()
         commandstring = command % (arg.parsed.command, arg.parsed.args)
+        commandstring = self.convert_charset(commandstring)
         self.curs.execute(commandstring, self.varsUsed)
         executionmessage = '\nExecuted%s\n' % ((self.curs.rowcount > 0) and ' (%d rows)' % self.curs.rowcount or '')
         if self.rdbms == 'oracle':
